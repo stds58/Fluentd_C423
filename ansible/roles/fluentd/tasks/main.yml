@@ -1,0 +1,138 @@
+---
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Установка зависимостей для добавления репозиториев
+  become: yes
+  apt:
+    name:
+      - curl
+      - gnupg
+      - apt-transport-https
+    state: present
+    update_cache: yes
+
+- name: Скачивание GPG-ключа Fluentd
+  become: yes
+  get_url:
+    url: https://packages.treasuredata.com/GPG-KEY-td-agent
+    dest: /tmp/GPG-KEY-td-agent.asc
+
+- name: Добавление GPG-ключа Fluentd
+  become: yes
+  apt_key:
+    file: /tmp/GPG-KEY-td-agent.asc
+    state: present
+
+- name: Добавление репозитория Fluentd
+  become: yes
+  apt_repository:
+    repo: deb https://packages.treasuredata.com/4/ubuntu/jammy  jammy contrib
+
+    filename: treasure-data
+    state: present
+
+- name: Обновление кэша пакетов
+  become: yes
+  apt:
+    update_cache: yes
+
+- name: Установка td-agent (Fluentd)
+  become: yes
+  apt:
+    name: td-agent
+    state: present
+
+#- name: Установка зависимостей для Ruby
+#  become: yes
+#  apt:
+#    name:
+#      - ruby
+#      - ruby-dev
+#      - build-essential
+#    state: present
+#
+#- name: fluent-plugin-rewrite-tag-filter
+#  become: yes
+#  gem:
+#    name: fluent-plugin-rewrite-tag-filter
+#    state: present
+
+- name: Проверка наличия старого конфигурационного файла td-agent.conf
+  stat:
+    path: /etc/td-agent/td-agent.conf
+  register: old_config
+
+- name: Переименование старого конфигурационного файла (если существует)
+  command: mv /etc/td-agent/td-agent.conf /etc/td-agent/td-agent.conf.bak
+  when: old_config.stat.exists and not old_config.stat.isdir
+
+- name: Создание нового конфигурационного файла td-agent.conf
+  template:
+    src: td-agent3.conf.j2
+    dest: /etc/td-agent/td-agent.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Создание директории для логов Fluentd
+  file:
+    path: /var/log/fluent
+    state: directory
+    owner: td-agent
+    group: td-agent
+    mode: '0755'
+
+
+- name: Перезапуск службы td-agent
+  become: yes
+  service:
+    name: td-agent
+    state: restarted
+    enabled: yes
+
+- name: Проверка работы Fluentd через HTTP-запрос localhost
+  shell: |
+    curl -X POST -d 'json={“source”: “localhost”, "message":"999999--localhost--9999999"}' http://localhost:8888/test1 || true
+  args:
+    chdir: /tmp
+  register: curl_result
+  ignore_errors: yes
+
+- name: Отладочная информация — результат запроса
+  debug:
+    msg: "{{ curl_result.stdout }}"
+
+- name: Поиск последнего сообщения 'test1' в логе td-agent.log
+  shell: "grep 'test1:' /var/log/td-agent/td-agent.log | tail -n 1"
+  register: last_log_entry
+  ignore_errors: yes
+  changed_when: false
+
+- name: Отладочная информация — последнее сообщение из лога
+  debug:
+    msg: "Последнее сообщение: {{ last_log_entry.stdout | default('Не найдено') }}"
+
+- name: Проверка работы Fluentd через HTTP-запрос remotehost
+  shell: |
+    curl -X POST -d 'json={“source”: “remotehost”, "message":"====remotehost===="}' http://localhost:8888/test1 || true
+  args:
+    chdir: /tmp
+  register: curl_result
+  ignore_errors: yes
+
+- name: Отладочная информация — результат запроса
+  debug:
+    msg: "{{ curl_result.stdout }}"
+
+- name: Поиск последнего сообщения 'test1' в логе td-agent.log
+  shell: "grep 'test1:' /var/log/td-agent/td-agent.log | tail -n 1"
+  register: last_log_entry
+  ignore_errors: yes
+  changed_when: false
+
+- name: Отладочная информация — последнее сообщение из лога
+  debug:
+    msg: "Последнее сообщение: {{ last_log_entry.stdout | default('Не найдено') }}"
