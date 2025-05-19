@@ -95,7 +95,7 @@
 
 - name: Проверка работы Fluentd через HTTP-запрос localhost
   shell: |
-    curl -X POST -d 'json={“source”: “localhost”, "message":"999999--localhost--9999999"}' http://localhost:8888/test1 || true
+    curl -X POST -d 'json={“source”: “localhost”, "message":"999999--localhost--9999999"}' http://localhost:8888/test1
   args:
     chdir: /tmp
   register: curl_result
@@ -117,7 +117,7 @@
 
 - name: Проверка работы Fluentd через HTTP-запрос remotehost
   shell: |
-    curl -X POST -d 'json={“source”: “remotehost”, "message":"====remotehost===="}' http://localhost:8888/test1 || true
+    curl -X POST -d 'json={“source”: “remotehost”, "message":"====remotehost===="}' http://localhost:8888/test1
   args:
     chdir: /tmp
   register: curl_result
